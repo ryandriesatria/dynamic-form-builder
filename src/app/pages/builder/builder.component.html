@@ -84,11 +84,17 @@
                 (click)="selectNode(row.node.id)"
               >
                 <div class="flex flex-1 items-start gap-3" [style.paddingLeft.rem]="row.depth * 0.75">
-                  <span
-                    class="mt-1 h-2 w-2 rounded-full"
-                    [class.bg-indigo-400]="row.node.type === 'group'"
-                    [class.bg-emerald-400]="row.node.type !== 'group'"
-                  ></span>
+                  @if (row.node.type === 'group') {
+                    <button
+                      type="button"
+                      class="mt-0.5 h-6 w-6 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-sm transition hover:border-indigo-200 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                      (click)="toggleGroup(row.node.id); $event.stopPropagation()"
+                    >
+                      {{ isExpanded(row.node.id) ? '-' : '+' }}
+                    </button>
+                  } @else {
+                    <span class="mt-2 h-2 w-2 rounded-full bg-emerald-400"></span>
+                  }
                   <div class="space-y-1">
                     <div class="flex flex-wrap items-center gap-2">
                       <p class="text-sm font-semibold text-slate-900">{{ row.node.label }}</p>
@@ -103,6 +109,16 @@
                     </div>
                     <p class="text-xs text-slate-600">{{ row.meta }}</p>
                   </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    class="text-xs font-semibold text-slate-500 underline-offset-4 hover:text-indigo-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                    (click)="requestDelete(row.node.id); $event.stopPropagation()"
+                    [disabled]="row.badge === 'Root'"
+                  >
+                    Delete
+                  </button>
                 </div>
               </button>
             }
@@ -175,4 +191,31 @@
       </div>
     </aside>
   </div>
+
+  @if (pendingDelete(); as pending) {
+    <div class="fixed inset-0 z-10 flex items-center justify-center bg-slate-900/50 px-4">
+      <div class="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+        <h3 class="text-lg font-semibold text-slate-900">Delete {{ pending.isGroup ? 'group' : 'field' }}?</h3>
+        <p class="mt-2 text-sm text-slate-600">
+          You are about to remove "{{ pending.label }}". This cannot be undone. Root cannot be deleted.
+        </p>
+        <div class="mt-4 flex items-center justify-end gap-3">
+          <button
+            type="button"
+            class="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            (click)="cancelDelete()"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="rounded-md bg-rose-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+            (click)="confirmDelete()"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  }
 </section>

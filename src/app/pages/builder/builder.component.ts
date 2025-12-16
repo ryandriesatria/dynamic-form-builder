@@ -32,6 +32,12 @@ type InspectorView = {
   options?: { label: string; value: string | number | boolean }[];
 };
 
+type PendingDelete = {
+  id: string;
+  label: string;
+  isGroup: boolean;
+};
+
 @Component({
   selector: 'app-builder',
   standalone: true,
@@ -41,6 +47,8 @@ type InspectorView = {
 })
 export class BuilderComponent implements OnInit {
   private readonly store = inject(FormSchemaStore);
+  private readonly expandedIds = signal<Set<string>>(new Set<string>());
+  protected readonly pendingDelete = signal<PendingDelete | null>(null);
 
   protected readonly paletteSections = signal<PaletteSection[]>([
     {
@@ -81,12 +89,14 @@ export class BuilderComponent implements OnInit {
 
     const rows: TreeRow[] = [];
     const selectedId = this.selectedNodeId();
+    const expanded = this.expandedIds();
 
-    const walk = (node: FieldNode, depth: number, badge?: string): void => {
+    const walk = (node: FieldNode, depth: number, badge?: string, forceExpanded: boolean = false): void => {
       const isGroup = node.type === 'group';
       const meta = isGroup
         ? `${(node as FieldGroup).children.length} item${(node as FieldGroup).children.length === 1 ? '' : 's'}`
         : this.describeField(node as FieldControl);
+      const expandedHere = forceExpanded || expanded.has(node.id);
 
       rows.push({
         node,
@@ -96,14 +106,14 @@ export class BuilderComponent implements OnInit {
         isSelected: node.id === selectedId
       });
 
-      if (isGroup) {
+      if (isGroup && (expandedHere || badge === 'Root')) {
         for (const child of (node as FieldGroup).children) {
           walk(child, depth + 1);
         }
       }
     };
 
-    walk(schema.root, 0, 'Root');
+    walk(schema.root, 0, 'Root', true);
     return rows;
   });
 
@@ -137,6 +147,10 @@ export class BuilderComponent implements OnInit {
 
   ngOnInit(): void {
     this.store.loadDefaultSchema();
+    const rootId = this.schema()?.root.id;
+    if (rootId) {
+      this.expandGroup(rootId);
+    }
   }
 
   protected selectNode(nodeId: string): void {
@@ -157,6 +171,74 @@ export class BuilderComponent implements OnInit {
     const node = type === 'group' ? this.createGroupNode() : this.createFieldNode(type);
     this.store.addNode(parentGroupId, node);
     this.store.selectNode(node.id);
+  }
+
+  protected toggleGroup(nodeId: string): void {
+    const schema = this.schema();
+    if (!schema || schema.root.id === nodeId) {
+      return;
+    }
+
+    const next = new Set(this.expandedIds());
+    if (next.has(nodeId)) {
+      next.delete(nodeId);
+    } else {
+      next.add(nodeId);
+    }
+    this.expandedIds.set(next);
+  }
+
+  protected isExpanded(nodeId: string): boolean {
+    const schema = this.schema();
+    if (schema && schema.root.id === nodeId) {
+      return true;
+    }
+    return this.expandedIds().has(nodeId);
+  }
+
+  protected requestDelete(nodeId: string): void {
+    const schema = this.schema();
+    if (!schema || schema.root.id === nodeId) {
+      return;
+    }
+
+    const node = this.findNode(schema.root, nodeId);
+    if (!node) {
+      return;
+    }
+
+    this.pendingDelete.set({
+      id: node.id,
+      label: node.label,
+      isGroup: node.type === 'group'
+    });
+  }
+
+  protected cancelDelete(): void {
+    this.pendingDelete.set(null);
+  }
+
+  protected confirmDelete(): void {
+    const pending = this.pendingDelete();
+    const schema = this.schema();
+    if (!pending || !schema) {
+      return;
+    }
+
+    if (schema.root.id === pending.id) {
+      this.pendingDelete.set(null);
+      return;
+    }
+
+    const parentId = this.findParentGroupId(schema.root, pending.id) ?? schema.root.id;
+
+    const nextExpanded = new Set(this.expandedIds());
+    nextExpanded.delete(pending.id);
+    this.expandedIds.set(nextExpanded);
+
+    this.store.removeNode(pending.id);
+    this.store.selectNode(parentId);
+    this.pendingDelete.set(null);
   }
 
   private resolveTargetGroupId(schema: FormSchema): string | null {
@@ -187,6 +269,29 @@ export class BuilderComponent implements OnInit {
     }
 
     return null;
+  }
+
+  private findNode(node: FieldNode, nodeId: string): FieldNode | null {
+    if (node.id === nodeId) {
+      return node;
+    }
+
+    if (node.type === 'group') {
+      for (const child of (node as FieldGroup).children) {
+        const found = this.findNode(child, nodeId);
+        if (found) {
+          return found;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private expandGroup(groupId: string): void {
+    const next = new Set(this.expandedIds());
+    next.add(groupId);
+    this.expandedIds.set(next);
   }
 
   private createGroupNode(): FieldGroup {
