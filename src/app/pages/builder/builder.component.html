@@ -1,0 +1,20 @@
+<section class="rounded-xl bg-white p-6 shadow">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold text-slate-900">Builder</h1>
+      <p class="mt-2 max-w-2xl text-sm text-slate-600">
+        Draft your form structure. This placeholder view highlights where the dynamic builder experience will live.
+      </p>
+    </div>
+    <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-700">Draft</span>
+  </div>
+  <div class="mt-6 grid gap-4 sm:grid-cols-2">
+    @for (field of placeholderFields(); track field.label) {
+      <article class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <h2 class="text-base font-semibold text-slate-900">{{ field.label }}</h2>
+        <p class="mt-2 text-sm text-slate-600">{{ field.type }}</p>
+        <div class="mt-3 h-10 rounded-md border border-dashed border-indigo-200 bg-white"></div>
+      </article>
+    }
+  </div>
+</section>

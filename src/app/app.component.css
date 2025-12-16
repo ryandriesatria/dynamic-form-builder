@@ -1,0 +1,10 @@
+:host {
+  display: block;
+  min-height: 100vh;
+}
+
+header a.router-link-active {
+  border-color: rgb(199 210 254);
+  background-color: rgb(238 242 255);
+  color: rgb(67 56 202);
+}

@@ -1,0 +1,24 @@
+<header class="bg-white shadow-sm">
+  <nav class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4" aria-label="Primary">
+    <a class="text-lg font-semibold text-indigo-600" routerLink="/builder">Codex Forms</a>
+    <div class="flex items-center gap-4">
+      <a
+        routerLink="/builder"
+        routerLinkActive="text-indigo-700 border-indigo-200 bg-indigo-50"
+        class="rounded-full border border-transparent px-3 py-2 text-sm font-medium transition hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+      >
+        Builder
+      </a>
+      <a
+        routerLink="/preview"
+        routerLinkActive="text-indigo-700 border-indigo-200 bg-indigo-50"
+        class="rounded-full border border-transparent px-3 py-2 text-sm font-medium transition hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+      >
+        Preview
+      </a>
+    </div>
+  </nav>
+</header>
+<main class="mx-auto max-w-6xl px-4 py-8">
+  <router-outlet></router-outlet>
+</main>
