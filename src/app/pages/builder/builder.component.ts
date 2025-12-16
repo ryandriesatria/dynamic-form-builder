@@ -1,32 +1,35 @@
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { FieldControl, FieldControlType, FieldGroup, FieldNode, FormSchema, generateId } from '../../models/form-schema.model';
+import { FormSchemaStore } from '../../services/form-schema.store';
 
-type PaletteField = {
+type PaletteItem = {
   label: string;
   description: string;
+  type: 'group' | FieldControlType;
 };
 
 type PaletteSection = {
   title: string;
-  fields: PaletteField[];
+  items: PaletteItem[];
 };
 
-type FormTreeNode = {
-  label: string;
-  type: 'group' | 'field';
-  meta: string;
+type TreeRow = {
+  node: FieldNode;
   depth: number;
+  meta: string;
   badge?: string;
+  isSelected: boolean;
 };
 
-type InspectorSelection = {
-  label: string;
-  type: string;
-  key: string;
-  description: string;
-  helperText: string;
-  validations: { label: string; value: string }[];
-  visibility: string[];
-  actions: string[];
+type InspectorView = {
+  title: string;
+  typeLabel: string;
+  meta: string;
+  key?: string;
+  placeholder?: string;
+  required?: boolean;
+  options?: { label: string; value: string | number | boolean }[];
 };
 
 @Component({
@@ -36,65 +39,266 @@ type InspectorSelection = {
   styleUrls: ['./builder.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class BuilderComponent {
+export class BuilderComponent implements OnInit {
+  private readonly store = inject(FormSchemaStore);
+
   protected readonly paletteSections = signal<PaletteSection[]>([
     {
+      title: 'Structure',
+      items: [
+        { label: 'Group', description: 'Nest steps or related inputs.', type: 'group' }
+      ]
+    },
+    {
       title: 'Inputs',
-      fields: [
-        { label: 'Text input', description: 'Single line for names and titles.' },
-        { label: 'Email', description: 'Validates formatting automatically.' },
-        { label: 'Number', description: 'Capture counts, currency, or scores.' },
-        { label: 'Date', description: 'Schedule meetings or target launch days.' }
+      items: [
+        { label: 'Text', description: 'Single line text input.', type: 'text' },
+        { label: 'Email', description: 'Captures valid email addresses.', type: 'email' },
+        { label: 'Number', description: 'Quantities, currency, or scores.', type: 'number' },
+        { label: 'Textarea', description: 'Long-form responses.', type: 'textarea' }
       ]
     },
     {
       title: 'Choices',
-      fields: [
-        { label: 'Select', description: 'Dropdown with curated options.' },
-        { label: 'Radio group', description: 'Pick one clear option.' },
-        { label: 'Checkbox', description: 'Toggle opt-ins and agreements.' }
-      ]
-    },
-    {
-      title: 'Layout',
-      fields: [
-        { label: 'Section', description: 'Organize steps or themes.' },
-        { label: 'Group', description: 'Nest related inputs together.' },
-        { label: 'Hint', description: 'Add helper text or guidance.' }
+      items: [
+        { label: 'Select', description: 'Dropdown with options.', type: 'select' },
+        { label: 'Checkbox', description: 'On/off agreement or toggle.', type: 'checkbox' },
+        { label: 'Radio group', description: 'Pick exactly one choice.', type: 'radio' },
+        { label: 'Date', description: 'Schedule or deadlines.', type: 'date' }
       ]
     }
   ]);
 
-  protected readonly formTree = signal<FormTreeNode[]>([
-    { label: 'Contact form', type: 'group', meta: '3 sections - 6 fields', depth: 0, badge: 'Root' },
-    { label: 'Hero', type: 'group', meta: 'Intro copy & CTA', depth: 1 },
-    { label: 'Name', type: 'field', meta: 'Text - required', depth: 2 },
-    { label: 'Email address', type: 'field', meta: 'Email - validated', depth: 2 },
-    { label: 'Message', type: 'field', meta: 'Textarea - helper text', depth: 2 },
-    { label: 'Preferences', type: 'group', meta: 'Optional branch', depth: 1 },
-    { label: 'Contact me', type: 'field', meta: 'Checkbox toggles follow-up fields', depth: 2 },
-    { label: 'Channel', type: 'field', meta: 'Select - defaults to email', depth: 2 },
-    { label: 'Availability', type: 'field', meta: 'Date - weekdays only', depth: 2 }
-  ]);
+  protected readonly schema = toSignal(this.store.schema$, { initialValue: null });
+  protected readonly selectedNodeId = toSignal(this.store.selectedNodeId$, { initialValue: null });
+  protected readonly selectedNode = toSignal(this.store.selectedNode$, { initialValue: null });
 
-  protected readonly selectedField = signal<InspectorSelection>({
-    label: 'Email address',
-    type: 'Email',
-    key: 'contact.email',
-    description: 'Primary contact method for updates and receipts.',
-    helperText: 'We only use this to notify you about your submission.',
-    validations: [
-      { label: 'Required', value: 'Yes - cannot submit without a value' },
-      { label: 'Format', value: 'Must match email pattern' },
-      { label: 'Domain allowlist', value: 'Optional: limit to company domains' }
-    ],
-    visibility: [
-      'Visible when "Contact me" checkbox is selected',
-      'Hidden for kiosk mode submissions'
-    ],
-    actions: [
-      'On change -> validate MX and surface hint',
-      'On submit -> send confirmation email'
-    ]
+  protected readonly treeRows = computed<TreeRow[]>(() => {
+    const schema = this.schema();
+    if (!schema) {
+      return [];
+    }
+
+    const rows: TreeRow[] = [];
+    const selectedId = this.selectedNodeId();
+
+    const walk = (node: FieldNode, depth: number, badge?: string): void => {
+      const isGroup = node.type === 'group';
+      const meta = isGroup
+        ? `${(node as FieldGroup).children.length} item${(node as FieldGroup).children.length === 1 ? '' : 's'}`
+        : this.describeField(node as FieldControl);
+
+      rows.push({
+        node,
+        depth,
+        meta,
+        badge,
+        isSelected: node.id === selectedId
+      });
+
+      if (isGroup) {
+        for (const child of (node as FieldGroup).children) {
+          walk(child, depth + 1);
+        }
+      }
+    };
+
+    walk(schema.root, 0, 'Root');
+    return rows;
   });
+
+  protected readonly inspector = computed<InspectorView | null>(() => {
+    const schema = this.schema();
+    if (!schema) {
+      return null;
+    }
+
+    const node = this.selectedNode() ?? schema.root;
+    if (node.type === 'group') {
+      const group = node as FieldGroup;
+      return {
+        title: group.label,
+        typeLabel: 'Group',
+        meta: `${group.children.length} item${group.children.length === 1 ? '' : 's'}`
+      };
+    }
+
+    const field = node as FieldControl;
+    return {
+      title: field.label,
+      typeLabel: this.friendlyLabel(field.type),
+      meta: this.describeField(field),
+      key: field.key,
+      placeholder: field.placeholder,
+      required: field.required,
+      options: field.options
+    };
+  });
+
+  ngOnInit(): void {
+    this.store.loadDefaultSchema();
+  }
+
+  protected selectNode(nodeId: string): void {
+    this.store.selectNode(nodeId);
+  }
+
+  protected addFromPalette(type: 'group' | FieldControlType): void {
+    const schema = this.schema();
+    if (!schema) {
+      return;
+    }
+
+    const parentGroupId = this.resolveTargetGroupId(schema);
+    if (!parentGroupId) {
+      return;
+    }
+
+    const node = type === 'group' ? this.createGroupNode() : this.createFieldNode(type);
+    this.store.addNode(parentGroupId, node);
+    this.store.selectNode(node.id);
+  }
+
+  private resolveTargetGroupId(schema: FormSchema): string | null {
+    const selected = this.selectedNode();
+    if (!selected) {
+      return schema.root.id;
+    }
+
+    if (selected.type === 'group') {
+      return selected.id;
+    }
+
+    return this.findParentGroupId(schema.root, selected.id) ?? schema.root.id;
+  }
+
+  private findParentGroupId(group: FieldGroup, nodeId: string): string | null {
+    for (const child of group.children) {
+      if (child.id === nodeId) {
+        return group.id;
+      }
+
+      if (child.type === 'group') {
+        const fromChild = this.findParentGroupId(child, nodeId);
+        if (fromChild) {
+          return fromChild;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private createGroupNode(): FieldGroup {
+    return {
+      id: generateId('group'),
+      type: 'group',
+      label: 'New group',
+      children: []
+    };
+  }
+
+  private createFieldNode(type: FieldControlType): FieldControl {
+    const id = generateId('field');
+    const suffix = id.slice(-4);
+
+    const base: FieldControl = {
+      id,
+      type,
+      key: `${type}-${suffix}`,
+      label: this.friendlyLabel(type),
+      placeholder: undefined,
+      required: type !== 'checkbox'
+    };
+
+    switch (type) {
+      case 'text':
+        return { ...base, placeholder: 'Enter text' };
+      case 'email':
+        return { ...base, placeholder: 'name@example.com' };
+      case 'number':
+        return { ...base, placeholder: 'Enter a number', validators: { min: 0 } };
+      case 'textarea':
+        return {
+          ...base,
+          label: 'Message',
+          placeholder: 'Add details',
+          validators: { minLength: 10 }
+        };
+      case 'select':
+        return {
+          ...base,
+          label: 'Select option',
+          defaultValue: 'option-1',
+          options: [
+            { label: 'Option 1', value: 'option-1' },
+            { label: 'Option 2', value: 'option-2' },
+            { label: 'Option 3', value: 'option-3' }
+          ]
+        };
+      case 'checkbox':
+        return {
+          ...base,
+          label: 'Accept terms',
+          defaultValue: false,
+          required: false
+        };
+      case 'radio':
+        return {
+          ...base,
+          label: 'Choose one',
+          defaultValue: 'option-1',
+          options: [
+            { label: 'Option A', value: 'option-1' },
+            { label: 'Option B', value: 'option-2' }
+          ]
+        };
+      case 'date':
+        return { ...base, label: 'Date', placeholder: 'Select a date', required: false };
+      default:
+        return base;
+    }
+  }
+
+  private describeField(field: FieldControl): string {
+    const pieces = [this.friendlyLabel(field.type)];
+    if (field.required) {
+      pieces.push('required');
+    } else {
+      pieces.push('optional');
+    }
+
+    if (field.placeholder) {
+      pieces.push(field.placeholder);
+    }
+
+    if (field.options?.length) {
+      pieces.push(`${field.options.length} option${field.options.length === 1 ? '' : 's'}`);
+    }
+
+    return pieces.join(' - ');
+  }
+
+  private friendlyLabel(type: FieldControlType): string {
+    switch (type) {
+      case 'text':
+        return 'Text';
+      case 'email':
+        return 'Email';
+      case 'number':
+        return 'Number';
+      case 'textarea':
+        return 'Textarea';
+      case 'select':
+        return 'Select';
+      case 'checkbox':
+        return 'Checkbox';
+      case 'radio':
+        return 'Radio group';
+      case 'date':
+        return 'Date';
+      default:
+        return type;
+    }
+  }
 }
