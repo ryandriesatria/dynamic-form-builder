@@ -1,20 +1,168 @@
-<section class="rounded-xl bg-white p-6 shadow">
-  <div class="flex items-start justify-between gap-4">
-    <div>
+<section class="space-y-6">
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div class="space-y-1">
       <h1 class="text-2xl font-semibold text-slate-900">Builder</h1>
-      <p class="mt-2 max-w-2xl text-sm text-slate-600">
-        Draft your form structure. This placeholder view highlights where the dynamic builder experience will live.
+      <p class="max-w-3xl text-sm text-slate-600">
+        Draft your form layout, organize the tree, and fine-tune properties without leaving this canvas.
       </p>
     </div>
-    <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-700">Draft</span>
+    <div class="flex items-center gap-2">
+      <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-700">Draft</span>
+      <button
+        type="button"
+        class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-indigo-200 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+      >
+        Preview form
+      </button>
+    </div>
   </div>
-  <div class="mt-6 grid gap-4 sm:grid-cols-2">
-    @for (field of placeholderFields(); track field.label) {
-      <article class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <h2 class="text-base font-semibold text-slate-900">{{ field.label }}</h2>
-        <p class="mt-2 text-sm text-slate-600">{{ field.type }}</p>
-        <div class="mt-3 h-10 rounded-md border border-dashed border-indigo-200 bg-white"></div>
-      </article>
-    }
+
+  <div class="grid grid-cols-1 gap-4 lg:grid-cols-12">
+    <aside class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-3">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-semibold text-slate-900">Field Palette</h2>
+          <p class="text-sm text-slate-600">Drag reusable blocks or tap to insert.</p>
+        </div>
+        <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-700">Library</span>
+      </div>
+
+      <div class="mt-4 space-y-4">
+        @for (section of paletteSections(); track section.title) {
+          <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-sm font-semibold text-slate-900">{{ section.title }}</h3>
+              <span class="text-xs font-medium text-slate-500">{{ section.fields.length }} items</span>
+            </div>
+            <div class="mt-3 space-y-2">
+              @for (field of section.fields; track field.label) {
+                <button
+                  type="button"
+                  class="flex w-full items-start justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-left shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                >
+                  <div class="space-y-1">
+                    <p class="text-sm font-medium text-slate-900">{{ field.label }}</p>
+                    <p class="text-xs text-slate-600">{{ field.description }}</p>
+                  </div>
+                  <span class="text-xs font-semibold text-indigo-600">+</span>
+                </button>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    </aside>
+
+    <section class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-5">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-semibold text-slate-900">Form Tree</h2>
+          <p class="text-sm text-slate-600">See groups, fields, and branching at a glance.</p>
+        </div>
+        <button
+          type="button"
+          class="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+        >
+          Add section
+        </button>
+      </div>
+
+      <div class="mt-4 divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+        @for (node of formTree(); track node.label + '-' + node.depth) {
+          <div class="flex items-center gap-3 px-4 py-3">
+            <div class="flex flex-1 items-start gap-3" [style.paddingLeft.rem]="node.depth * 0.75">
+              <span
+                class="mt-1 h-2 w-2 rounded-full"
+                [class.bg-indigo-400]="node.type === 'group'"
+                [class.bg-emerald-400]="node.type === 'field'"
+              ></span>
+              <div class="space-y-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <p class="text-sm font-semibold text-slate-900">{{ node.label }}</p>
+                  <span class="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                    {{ node.type }}
+                  </span>
+                </div>
+                <p class="text-xs text-slate-600">{{ node.meta }}</p>
+              </div>
+            </div>
+            @if (node.badge) {
+              <span class="rounded-full bg-indigo-50 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+                {{ node.badge }}
+              </span>
+            }
+          </div>
+        }
+      </div>
+    </section>
+
+    <aside class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-4">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-semibold text-slate-900">Properties Inspector</h2>
+          <p class="text-sm text-slate-600">Tune the highlighted field before shipping.</p>
+        </div>
+        <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">In focus</span>
+      </div>
+
+      <div class="mt-4 space-y-4">
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Selected field</p>
+              <h3 class="text-base font-semibold text-slate-900">{{ selectedField().label }}</h3>
+            </div>
+            <span class="rounded-md bg-white px-2 py-1 text-xs font-semibold text-indigo-700">{{ selectedField().type }}</span>
+          </div>
+          <p class="mt-2 text-sm text-slate-600">{{ selectedField().description }}</p>
+          <dl class="mt-3 grid grid-cols-1 gap-2 text-sm">
+            <div class="rounded-md border border-dashed border-slate-200 bg-white px-3 py-2">
+              <dt class="text-xs uppercase tracking-wide text-slate-500">Field key</dt>
+              <dd class="font-medium text-slate-900">{{ selectedField().key }}</dd>
+            </div>
+            <div class="rounded-md border border-dashed border-slate-200 bg-white px-3 py-2">
+              <dt class="text-xs uppercase tracking-wide text-slate-500">Helper text</dt>
+              <dd class="font-medium text-slate-900">{{ selectedField().helperText }}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="rounded-lg border border-slate-200 bg-white p-4">
+          <div class="flex items-center justify-between">
+            <h4 class="text-sm font-semibold text-slate-900">Validation</h4>
+            <span class="text-xs font-medium text-slate-500">{{ selectedField().validations.length }} rules</span>
+          </div>
+          <div class="mt-3 space-y-2">
+            @for (rule of selectedField().validations; track rule.label) {
+              <div class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <p class="text-sm font-semibold text-slate-900">{{ rule.label }}</p>
+                <p class="text-xs text-slate-600">{{ rule.value }}</p>
+              </div>
+            }
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-slate-200 bg-white p-4">
+          <h4 class="text-sm font-semibold text-slate-900">Visibility</h4>
+          <div class="mt-3 flex flex-wrap gap-2">
+            @for (rule of selectedField().visibility; track rule) {
+              <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">{{ rule }}</span>
+            }
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-slate-200 bg-white p-4">
+          <h4 class="text-sm font-semibold text-slate-900">Actions</h4>
+          <ul class="mt-3 space-y-2 text-sm text-slate-700">
+            @for (action of selectedField().actions; track action) {
+              <li class="flex items-start gap-2">
+                <span class="mt-1 h-2 w-2 rounded-full bg-emerald-500"></span>
+                <span>{{ action }}</span>
+              </li>
+            }
+          </ul>
+        </div>
+      </div>
+    </aside>
   </div>
 </section>
