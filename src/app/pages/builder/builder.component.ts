@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { AbstractControl, FormArray, FormBuilder, FormGroup, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FieldControl, FieldControlType, FieldGroup, FieldNode, FormSchema, generateId } from '../../models/form-schema.model';
 import { FormSchemaStore } from '../../services/form-schema.store';
@@ -41,14 +43,17 @@ type PendingDelete = {
 @Component({
   selector: 'app-builder',
   standalone: true,
+  imports: [CommonModule, ReactiveFormsModule],
   templateUrl: './builder.component.html',
   styleUrls: ['./builder.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class BuilderComponent implements OnInit {
   private readonly store = inject(FormSchemaStore);
+  private readonly fb = inject(FormBuilder);
   private readonly expandedIds = signal<Set<string>>(new Set<string>());
   protected readonly pendingDelete = signal<PendingDelete | null>(null);
+  private isPatchingForm = false;
 
   protected readonly paletteSections = signal<PaletteSection[]>([
     {
@@ -80,6 +85,25 @@ export class BuilderComponent implements OnInit {
   protected readonly schema = toSignal(this.store.schema$, { initialValue: null });
   protected readonly selectedNodeId = toSignal(this.store.selectedNodeId$, { initialValue: null });
   protected readonly selectedNode = toSignal(this.store.selectedNode$, { initialValue: null });
+  protected readonly selectedControlType = computed<FieldControlType | null>(() => {
+    const node = this.selectedNode();
+    return node && node.type !== 'group' ? node.type : null;
+  });
+  protected readonly inspectorForm = this.fb.group({
+    label: ['', [Validators.required]],
+    key: [''],
+    placeholder: [''],
+    defaultValue: [''],
+    required: [false],
+    options: this.fb.array([] as FormGroup[]),
+    validators: this.fb.group({
+      min: [''],
+      max: [''],
+      minLength: [''],
+      maxLength: [''],
+      pattern: ['']
+    })
+  });
 
   protected readonly treeRows = computed<TreeRow[]>(() => {
     const schema = this.schema();
@@ -151,6 +175,20 @@ export class BuilderComponent implements OnInit {
     if (rootId) {
       this.expandGroup(rootId);
     }
+
+    effect(() => {
+      const node = this.selectedNode() ?? this.schema()?.root;
+      if (node) {
+        this.patchInspectorForm(node);
+      }
+    });
+
+    this.inspectorForm.valueChanges.subscribe(() => {
+      if (this.isPatchingForm) {
+        return;
+      }
+      this.applyInspectorChanges();
+    });
   }
 
   protected selectNode(nodeId: string): void {
@@ -252,6 +290,213 @@ export class BuilderComponent implements OnInit {
     }
 
     return this.findParentGroupId(schema.root, selected.id) ?? schema.root.id;
+  }
+
+  private patchInspectorForm(node: FieldNode): void {
+    this.isPatchingForm = true;
+
+    const optionsArray = this.inspectorForm.get('options') as FormArray<FormGroup>;
+    while (optionsArray.length) {
+      optionsArray.removeAt(0);
+    }
+
+    if (node.type === 'group') {
+      this.inspectorForm.reset({
+        label: node.label,
+        key: '',
+        placeholder: '',
+        defaultValue: '',
+        required: false,
+        validators: {
+          min: '',
+          max: '',
+          minLength: '',
+          maxLength: '',
+          pattern: ''
+        }
+      });
+      this.inspectorForm.get('label')?.setValidators([Validators.required]);
+      this.inspectorForm.get('label')?.updateValueAndValidity({ emitEvent: false });
+      this.inspectorForm.get('key')?.disable({ emitEvent: false });
+      this.inspectorForm.get('placeholder')?.disable({ emitEvent: false });
+      this.inspectorForm.get('defaultValue')?.disable({ emitEvent: false });
+      this.inspectorForm.get('required')?.disable({ emitEvent: false });
+      this.inspectorForm.get('validators')?.disable({ emitEvent: false });
+      optionsArray.disable({ emitEvent: false });
+    } else {
+      const field = node as FieldControl;
+      const keyControl = this.inspectorForm.get('key');
+      keyControl?.setValidators([Validators.required, (control) => this.uniqueKeyValidator(control, field.id)]);
+      keyControl?.updateValueAndValidity({ emitEvent: false });
+      const patternControl = this.inspectorForm.get('validators.pattern');
+      patternControl?.setValidators([(control) => this.patternValidator(control)]);
+      patternControl?.updateValueAndValidity({ emitEvent: false });
+
+      this.inspectorForm.get('key')?.enable({ emitEvent: false });
+      this.inspectorForm.get('placeholder')?.enable({ emitEvent: false });
+      this.inspectorForm.get('defaultValue')?.enable({ emitEvent: false });
+      this.inspectorForm.get('required')?.enable({ emitEvent: false });
+      this.inspectorForm.get('validators')?.enable({ emitEvent: false });
+
+      const validators = field.validators ?? {};
+      const placeholder = field.placeholder ?? '';
+      const defaultValue = field.defaultValue ?? '';
+
+      if (field.options?.length && (field.type === 'select' || field.type === 'radio')) {
+        for (const opt of field.options) {
+          optionsArray.push(
+            this.fb.group({
+              label: [opt.label, Validators.required],
+              value: [opt.value, Validators.required]
+            })
+          );
+        }
+      }
+
+      this.inspectorForm.patchValue(
+        {
+          label: field.label,
+          key: field.key,
+          placeholder,
+          defaultValue,
+          required: field.required ?? false,
+          validators: {
+            min: validators.min ?? '',
+            max: validators.max ?? '',
+            minLength: validators.minLength ?? '',
+            maxLength: validators.maxLength ?? '',
+            pattern: validators.pattern ?? ''
+          }
+        },
+        { emitEvent: false }
+      );
+
+      if (field.type === 'select' || field.type === 'radio') {
+        optionsArray.enable({ emitEvent: false });
+      } else {
+        optionsArray.disable({ emitEvent: false });
+      }
+    }
+
+      this.isPatchingForm = false;
+  }
+
+  private applyInspectorChanges(): void {
+    const schema = this.schema();
+    const selected = this.selectedNode();
+    if (!schema || !selected || this.inspectorForm.invalid) {
+      return;
+    }
+
+    const formValue = this.inspectorForm.getRawValue();
+
+    if (selected.type === 'group') {
+      if (formValue.label !== selected.label) {
+        this.store.updateNode({ id: selected.id, label: formValue.label });
+      }
+      return;
+    }
+
+    const field = selected as FieldControl;
+    const validators = formValue.validators;
+    const optionsArray = (this.inspectorForm.get('options') as FormArray<FormGroup>).getRawValue();
+    const options =
+      field.type === 'select' || field.type === 'radio'
+        ? optionsArray.map((opt) => ({ label: opt.label, value: opt.value }))
+        : undefined;
+
+    const label = (formValue.label ?? '').trim();
+    const key = (formValue.key ?? '').trim();
+    const placeholder = (formValue.placeholder ?? '').trim();
+    const pattern = (validators.pattern ?? '').toString().trim();
+
+    const patch: Partial<FieldControl> & { id: string } = {
+      id: field.id,
+      label,
+      key,
+      placeholder,
+      defaultValue: formValue.defaultValue,
+      required: formValue.required,
+      validators: {
+        min: this.parseNumber(validators.min),
+        max: this.parseNumber(validators.max),
+        minLength: this.parseNumber(validators.minLength),
+        maxLength: this.parseNumber(validators.maxLength),
+        pattern: pattern || undefined
+      },
+      options
+    };
+
+    this.store.updateNode(patch);
+  }
+
+  protected addOption(): void {
+    const optionsArray = this.inspectorForm.get('options') as FormArray<FormGroup>;
+    optionsArray.push(
+      this.fb.group({
+        label: ['Option', Validators.required],
+        value: [`option-${optionsArray.length + 1}`, Validators.required]
+      })
+    );
+  }
+
+  protected removeOption(index: number): void {
+    const optionsArray = this.inspectorForm.get('options') as FormArray<FormGroup>;
+    if (index >= 0 && index < optionsArray.length) {
+      optionsArray.removeAt(index);
+    }
+  }
+
+  private uniqueKeyValidator(control: AbstractControl, currentId: string): ValidationErrors | null {
+    const value = (control.value ?? '').trim();
+    if (!value) {
+      return { required: true };
+    }
+
+    const schema = this.schema();
+    if (!schema) {
+      return null;
+    }
+
+    const keys = this.collectControlKeys(schema.root, currentId);
+    if (keys.has(value)) {
+      return { keyNotUnique: true };
+    }
+
+    return null;
+  }
+
+  private patternValidator(control: AbstractControl): ValidationErrors | null {
+    const value = (control.value ?? '').toString().trim();
+    if (!value) {
+      return null;
+    }
+    try {
+      // eslint-disable-next-line no-new
+      new RegExp(value);
+      return null;
+    } catch {
+      return { invalidPattern: true };
+    }
+  }
+
+  private collectControlKeys(node: FieldNode, excludeId: string, keys: Set<string> = new Set()): Set<string> {
+    if (node.type === 'group') {
+      for (const child of (node as FieldGroup).children) {
+        this.collectControlKeys(child, excludeId, keys);
+      }
+    } else if (node.id !== excludeId) {
+      keys.add((node as FieldControl).key);
+    }
+    return keys;
+  }
+
+  private parseNumber(value: unknown): number | undefined {
+    if (value === '' || value === null || value === undefined) {
+      return undefined;
+    }
+    const num = Number(value);
+    return Number.isNaN(num) ? undefined : num;
   }
 
   private findParentGroupId(group: FieldGroup, nodeId: string): string | null {
