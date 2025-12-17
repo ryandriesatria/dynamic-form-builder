@@ -5,13 +5,15 @@ import { deepClone, FieldGroup, FieldNode, FormSchema, generateId } from '../mod
 interface FormSchemaState {
   currentSchema: FormSchema | null;
   selectedNodeId: string | null;
+  lastUpdated: number;
 }
 
 @Injectable({ providedIn: 'root' })
 export class FormSchemaStore {
   private readonly state$ = new BehaviorSubject<FormSchemaState>({
     currentSchema: null,
-    selectedNodeId: null
+    selectedNodeId: null,
+    lastUpdated: Date.now()
   });
 
   readonly schema$ = this.state$.pipe(map((state) => state.currentSchema));
@@ -23,6 +25,12 @@ export class FormSchemaStore {
   readonly selectedNode$ = this.state$.pipe(
     map((state) => this.findNode(state.currentSchema?.root, state.selectedNodeId))
   );
+
+  readonly lastUpdated$ = this.state$.pipe(map((state) => state.lastUpdated));
+
+  get snapshot(): FormSchemaState {
+    return this.state$.value;
+  }
 
   loadDefaultSchema(): void {
     const defaultSchema: FormSchema = {
@@ -54,7 +62,7 @@ export class FormSchemaStore {
       }
     };
 
-    this.state$.next({ currentSchema: defaultSchema, selectedNodeId: defaultSchema.root.id });
+    this.state$.next({ currentSchema: defaultSchema, selectedNodeId: defaultSchema.root.id, lastUpdated: Date.now() });
   }
 
   selectNode(nodeId: string | null): void {
@@ -73,7 +81,7 @@ export class FormSchemaStore {
   updateNode(nodePatch: Partial<FieldNode> & { id: string }): void {
     this.updateSchema((schema) => ({
       ...schema,
-      root: this.patchNode(schema.root, nodePatch.id, nodePatch)
+      root: this.patchNode(schema.root, nodePatch.id, nodePatch) as FieldGroup
     }));
   }
 
@@ -98,7 +106,8 @@ export class FormSchemaStore {
     const nextSelectedNodeId = selectedNodeId === nodeId ? null : selectedNodeId;
     this.state$.next({
       currentSchema: { ...currentSchema, root: group },
-      selectedNodeId: nextSelectedNodeId
+      selectedNodeId: nextSelectedNodeId,
+      lastUpdated: Date.now()
     });
   }
 
@@ -121,7 +130,7 @@ export class FormSchemaStore {
     }
 
     const nextSchema = mutator(deepClone(currentSchema));
-    this.state$.next({ ...this.state$.value, currentSchema: nextSchema });
+    this.state$.next({ ...this.state$.value, currentSchema: nextSchema, lastUpdated: Date.now() });
   }
 
   private findNode(node: FieldNode | undefined, nodeId: string | null): FieldNode | null {

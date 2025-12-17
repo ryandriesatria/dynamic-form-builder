@@ -26,7 +26,9 @@ export type VisibilityOperator =
   | 'notEquals'
   | 'greaterThan'
   | 'lessThan'
-  | 'includes';
+  | 'includes'
+  | 'contains'
+  | 'isChecked';
 
 export interface VisibilityCondition {
   fieldKey: string;
@@ -56,6 +58,7 @@ export interface FieldControl {
   required?: boolean;
   validators?: FieldValidators;
   options?: FieldOption[];
+  visibleByDefault?: boolean;
   visibility?: FieldVisibilityRule;
 }
 

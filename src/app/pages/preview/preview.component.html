@@ -1,12 +1,70 @@
-<section class="rounded-xl bg-white p-6 shadow">
-  <h1 class="text-2xl font-semibold text-slate-900">Preview</h1>
-  <p class="mt-2 max-w-2xl text-sm text-slate-600">
-    Visualize how your form will appear once published. Replace this placeholder with live rendering as fields are added.
-  </p>
-  <div class="mt-6 rounded-lg border border-dashed border-indigo-200 bg-slate-50 p-6 text-sm text-slate-700">
-    <p class="font-medium text-indigo-700">Coming soon</p>
-    <p class="mt-1 text-slate-600">
-      Live preview of generated form inputs and validation states will be displayed here.
-    </p>
+<section class="space-y-6">
+  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold text-slate-900">Preview</h1>
+      <p class="mt-2 max-w-3xl text-sm text-slate-600">
+        Live rendering of your schema using Reactive Forms, including validation and submission output.
+      </p>
+    </div>
+    <button
+      type="button"
+      class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-indigo-200 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+      routerLink="/builder"
+    >
+      Back to builder
+    </button>
   </div>
+
+  @if (runtimeResult(); as runtime) {
+    <div class="grid gap-4 lg:grid-cols-12">
+      <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-7">
+        <form class="space-y-6" [formGroup]="runtime.form" (ngSubmit)="submit()">
+          <app-group-renderer
+            [group]="schema()!.root"
+            [formGroup]="runtime.form"
+            [submitted]="submitted()"
+            [visibleControlKeys]="visibleControlKeys()"
+            [visibleGroupIds]="visibleGroupIds()"
+          />
+
+          <div class="flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
+            <p class="text-xs text-slate-500">
+              {{ runtime.controlsByKey.size }} field{{ runtime.controlsByKey.size === 1 ? '' : 's' }} rendered
+            </p>
+            <button
+              type="submit"
+              class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            >
+              Submit
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-5">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-semibold text-slate-900">Submission</h2>
+            <p class="text-sm text-slate-600">Formatted JSON result from the form value.</p>
+          </div>
+          <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-700">
+            {{ runtime.form.valid ? 'Valid' : 'Invalid' }}
+          </span>
+        </div>
+
+        @if (submittedJson()) {
+          <pre class="mt-4 max-h-[28rem] overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs text-slate-800">{{ submittedJson() }}</pre>
+        } @else {
+          <div class="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+            Submit the form to see the JSON output here.
+          </div>
+        }
+      </aside>
+    </div>
+  } @else {
+    <div class="rounded-xl border border-dashed border-indigo-200 bg-white p-6 shadow-sm">
+      <p class="text-sm font-semibold text-slate-900">No schema loaded</p>
+      <p class="mt-1 text-sm text-slate-600">Open the builder and add fields to generate a schema.</p>
+    </div>
+  }
 </section>
